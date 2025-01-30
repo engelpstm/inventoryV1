@@ -5,10 +5,23 @@ const QRCode = require('qrcode');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const session = require('express-session');
+const bcrypt = require('bcrypt');
 const app = express();
 
 // Configuração do EJS como view engine
 app.set('view engine', 'ejs');
+
+// Configuração da sessão
+app.use(session({
+    secret: 'sua_chave_secreta_aqui',
+    resave: false,
+    saveUninitialized: false,
+    cookie: { 
+        secure: false, // set to true if using https
+        maxAge: 24 * 60 * 60 * 1000 // 24 horas
+    }
+}));
 
 // Configuração do Multer para upload de imagens
 const storage = multer.diskStorage({
@@ -61,8 +74,23 @@ pool.connect((err, client, done) => {
     }
 });
 
+// Middleware de autenticação
+const requireLogin = (req, res, next) => {
+    if (req.session.userId) {
+        next();
+    } else {
+        res.redirect('/login');
+    }
+};
+
 // Criar tabelas se não existirem
 const createTables = [
+    `CREATE TABLE IF NOT EXISTS usuarios (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(255) NOT NULL UNIQUE,
+        password VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    )`,
     `CREATE TABLE IF NOT EXISTS localizacoes (
         id SERIAL PRIMARY KEY,
         nome VARCHAR(255) NOT NULL UNIQUE
@@ -80,14 +108,75 @@ const createTables = [
 
 createTables.forEach(query => {
     pool.query(query, (err) => {
-        if (err) throw err;
+        if (err) {
+            console.error('Erro ao criar tabela:', err);
+        }
     });
 });
-console.log('Tabelas criadas ou já existentes');
+
+// Criar usuário admin padrão se não existir
+const createAdminUser = async () => {
+    try {
+        const result = await pool.query('SELECT * FROM usuarios WHERE username = $1', ['admin']);
+        if (result.rows.length === 0) {
+            const hashedPassword = await bcrypt.hash('admin', 10);
+            await pool.query(
+                'INSERT INTO usuarios (username, password) VALUES ($1, $2)',
+                ['admin', hashedPassword]
+            );
+            console.log('Usuário admin criado com sucesso');
+        }
+    } catch (err) {
+        console.error('Erro ao criar usuário admin:', err);
+    }
+};
+
+createAdminUser();
+
+// Rotas de autenticação
+app.get('/login', (req, res) => {
+    if (req.session.userId) {
+        res.redirect('/');
+    } else {
+        res.render('login');
+    }
+});
+
+app.post('/login', async (req, res) => {
+    const { username, password } = req.body;
+
+    try {
+        const result = await pool.query('SELECT * FROM usuarios WHERE username = $1', [username]);
+        
+        if (result.rows.length === 0) {
+            return res.status(401).json({ error: 'Usuário não encontrado' });
+        }
+
+        const user = result.rows[0];
+        const validPassword = await bcrypt.compare(password, user.password);
+
+        if (!validPassword) {
+            return res.status(401).json({ error: 'Senha incorreta' });
+        }
+
+        req.session.userId = user.id;
+        req.session.username = user.username;
+        res.json({ success: true });
+
+    } catch (err) {
+        console.error('Erro no login:', err);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    }
+});
+
+app.get('/logout', (req, res) => {
+    req.session.destroy();
+    res.redirect('/login');
+});
 
 // Rotas
 // Página inicial - Lista todos os bens
-app.get('/', (req, res) => {
+app.get('/', requireLogin, (req, res) => {
     pool.query(
         `SELECT b.*, l.nome as localizacao_nome 
          FROM bens b 
@@ -101,7 +190,7 @@ app.get('/', (req, res) => {
 });
 
 // Adicionar novo bem
-app.post('/adicionar', upload.single('imagem'), (req, res) => {
+app.post('/adicionar', requireLogin, upload.single('imagem'), (req, res) => {
     const { id, descricao, localizacao_id } = req.body;
     const data_cadastro = new Date().toISOString().slice(0, 10);
     const imagem = req.file ? '/uploads/' + req.file.filename : null;
@@ -124,7 +213,7 @@ app.post('/adicionar', upload.single('imagem'), (req, res) => {
 });
 
 // Página de edição
-app.get('/editar/:id', (req, res) => {
+app.get('/editar/:id', requireLogin, (req, res) => {
     pool.query(
         'SELECT * FROM bens WHERE id = $1',
         [req.params.id],
@@ -136,7 +225,7 @@ app.get('/editar/:id', (req, res) => {
 });
 
 // Atualizar bem
-app.post('/atualizar/:id', (req, res) => {
+app.post('/atualizar/:id', requireLogin, (req, res) => {
     const { descricao, localizacao_id } = req.body;
     
     pool.query(
@@ -150,7 +239,7 @@ app.post('/atualizar/:id', (req, res) => {
 });
 
 // Excluir bem
-app.get('/excluir/:id', (req, res) => {
+app.get('/excluir/:id', requireLogin, (req, res) => {
     pool.query(
         'DELETE FROM bens WHERE id = $1',
         [req.params.id],
@@ -162,7 +251,7 @@ app.get('/excluir/:id', (req, res) => {
 });
 
 // Rotas para Localizações
-app.get('/api/localizacoes', (req, res) => {
+app.get('/api/localizacoes', requireLogin, (req, res) => {
     pool.query('SELECT * FROM localizacoes ORDER BY nome', (err, results) => {
         if (err) {
             res.status(500).send('Erro ao buscar localizações');
@@ -172,7 +261,7 @@ app.get('/api/localizacoes', (req, res) => {
     });
 });
 
-app.post('/api/localizacoes', (req, res) => {
+app.post('/api/localizacoes', requireLogin, (req, res) => {
     const { nome } = req.body;
     
     // Validar se o nome foi fornecido e não está vazio
@@ -202,7 +291,7 @@ app.post('/api/localizacoes', (req, res) => {
     );
 });
 
-app.put('/api/localizacoes/:id', (req, res) => {
+app.put('/api/localizacoes/:id', requireLogin, (req, res) => {
     const { id } = req.params;
     const { nome } = req.body;
     
@@ -223,7 +312,7 @@ app.put('/api/localizacoes/:id', (req, res) => {
     );
 });
 
-app.delete('/api/localizacoes/:id', (req, res) => {
+app.delete('/api/localizacoes/:id', requireLogin, (req, res) => {
     const { id } = req.params;
     
     pool.query(
@@ -244,12 +333,12 @@ app.delete('/api/localizacoes/:id', (req, res) => {
 });
 
 // Rota para a página de QR Code
-app.get('/qrcode', (req, res) => {
+app.get('/qrcode', requireLogin, (req, res) => {
     res.render('qrcode');
 });
 
 // API para buscar bem por ID e gerar QR Code
-app.get('/api/bem/:id', async (req, res) => {
+app.get('/api/bem/:id', requireLogin, async (req, res) => {
     const { id } = req.params;
     
     pool.query(
@@ -298,7 +387,7 @@ app.get('/api/bem/:id', async (req, res) => {
 });
 
 // Gerar QR Code para um bem
-app.post('/gerar-qrcode/:id', async (req, res) => {
+app.post('/gerar-qrcode/:id', requireLogin, async (req, res) => {
     try {
         const id = req.params.id;
         const qrCodeData = `http://${req.get('host')}/bem/${id}`;
@@ -334,7 +423,7 @@ app.post('/gerar-qrcode/:id', async (req, res) => {
 });
 
 // Verificar se um bem existe
-app.get('/verificar-bem/:id', (req, res) => {
+app.get('/verificar-bem/:id', requireLogin, (req, res) => {
     const bemId = req.params.id;
     console.log('Verificando bem com ID:', bemId);
 
@@ -374,7 +463,7 @@ app.get('/verificar-bem/:id', (req, res) => {
 });
 
 // Rota para visualizar um bem específico
-app.get('/bem/:id', (req, res) => {
+app.get('/bem/:id', requireLogin, (req, res) => {
     pool.query(
         `SELECT b.*, l.nome as localizacao_nome 
          FROM bens b 
@@ -399,8 +488,36 @@ app.get('/bem/:id', (req, res) => {
 });
 
 // Página do scanner
-app.get('/scanner', (req, res) => {
+app.get('/scanner', requireLogin, (req, res) => {
     res.render('scanner');
+});
+
+app.post('/create-user', async (req, res) => {
+    const { username, password } = req.body;
+
+    try {
+        // Verificar se o usuário já existe
+        const userExists = await pool.query('SELECT * FROM usuarios WHERE username = $1', [username]);
+        if (userExists.rows.length > 0) {
+            return res.status(400).json({ error: 'Usuário já existe' });
+        }
+
+        // Criar novo usuário
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const result = await pool.query(
+            'INSERT INTO usuarios (username, password) VALUES ($1, $2) RETURNING id',
+            [username, hashedPassword]
+        );
+
+        // Fazer login automático após criar o usuário
+        req.session.userId = result.rows[0].id;
+        req.session.username = username;
+
+        res.json({ success: true, message: 'Usuário criado com sucesso', autoLogin: true });
+    } catch (err) {
+        console.error('Erro ao criar usuário:', err);
+        res.status(500).json({ error: 'Erro ao criar usuário' });
+    }
 });
 
 const PORT = 3000;
