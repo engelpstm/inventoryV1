@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Inventário</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body>
+    <div class="container mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>Inventário</h2>
+            <div>
+                <a href="/scanner" class="btn btn-primary me-2">
+                    <i class="bi bi-qr-code-scan"></i> Escanear QR Code
+                </a>
+                <a href="/qrcode" class="btn btn-primary">
+                    <i class="bi bi-qr-code"></i> Gerar QR Code
+                </a>
+            </div>
+        </div>
+
+        <!-- Gerenciamento de Localizações -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Gerenciar Localizações</h5>
+                <button class="btn btn-primary btn-sm" onclick="showAddLocation()">
+                    <i class="bi bi-plus-lg"></i> Nova Localização
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped" id="locationsTable">
+                        <thead>
+                            <tr>
+                                <th>Nome</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Preenchido via JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Formulário de Cadastro de Bens -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Cadastrar Novo Bem</h5>
+            </div>
+            <div class="card-body">
+                <form action="/adicionar" method="POST" id="formCadastro" onsubmit="return submitForm(event)" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label for="id" class="form-label">ID</label>
+                        <input type="number" class="form-control" id="id" name="id" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="descricao" class="form-label">Descrição</label>
+                        <input type="text" class="form-control" id="descricao" name="descricao" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="localizacao_id" class="form-label">Localização</label>
+                        <select class="form-select" id="localizacao_id" name="localizacao_id" required>
+                            <!-- Preenchido via JavaScript -->
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="imagem" class="form-label">Imagem do Bem</label>
+                        <input type="file" class="form-control" id="imagem" name="imagem" accept="image/*">
+                        <div class="form-text">Formatos aceitos: JPG, JPEG, PNG</div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Cadastrar</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Lista de Bens -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Bens Cadastrados</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Imagem</th>
+                                <th>Descrição</th>
+                                <th>Localização</th>
+                                <th>Data de Cadastro</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% bens.forEach(bem => { %>
+                                <tr>
+                                    <td><%= bem.id %></td>
+                                    <td>
+                                        <% if (bem.imagem) { %>
+                                            <img src="<%= bem.imagem %>" alt="Imagem do bem" style="max-width: 50px; max-height: 50px;" class="img-thumbnail">
+                                        <% } else { %>
+                                            <span class="text-muted">Sem imagem</span>
+                                        <% } %>
+                                    </td>
+                                    <td><%= bem.descricao %></td>
+                                    <td><%= bem.localizacao_nome %></td>
+                                    <td><%= new Date(bem.data_cadastro).toLocaleDateString('pt-BR') %></td>
+                                    <td>
+                                        <a href="/editar/<%= bem.id %>" class="btn btn-sm btn-warning">Editar</a>
+                                        <a href="/excluir/<%= bem.id %>" class="btn btn-sm btn-danger" onclick="return confirm('Tem certeza que deseja excluir este item?')">Excluir</a>
+                                    </td>
+                                </tr>
+                            <% }); %>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Carregar localizações
+        function loadLocations() {
+            fetch('/api/localizacoes')
+                .then(response => response.json())
+                .then(locations => {
+                    // Atualizar tabela de localizações
+                    const tbody = document.querySelector('#locationsTable tbody');
+                    tbody.innerHTML = locations.map(loc => `
+                        <tr>
+                            <td>${loc.nome}</td>
+                            <td>
+                                <button class="btn btn-sm btn-warning" onclick="editLocation(${loc.id}, '${loc.nome}')">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <button class="btn btn-sm btn-danger" onclick="deleteLocation(${loc.id})">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `).join('');
+
+                    // Atualizar select de localizações
+                    const select = document.querySelector('#localizacao_id');
+                    select.innerHTML = '<option value="">Selecione uma localização</option>' +
+                        locations.map(loc => `<option value="${loc.id}">${loc.nome}</option>`).join('');
+                });
+        }
+
+        // Adicionar localização
+        function showAddLocation() {
+            Swal.fire({
+                title: 'Nova Localização',
+                input: 'text',
+                inputLabel: 'Nome da localização',
+                showCancelButton: true,
+                confirmButtonText: 'Salvar',
+                cancelButtonText: 'Cancelar',
+                inputValidator: (value) => {
+                    if (!value || !value.trim()) {
+                        return 'Digite um nome para a localização';
+                    }
+                }
+            }).then((result) => {
+                if (result.isConfirmed && result.value) {
+                    const nome = result.value.trim();
+                    fetch('/api/localizacoes', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ nome })
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            return response.text().then(text => { throw new Error(text) });
+                        }
+                        return response.json();
+                    })
+                    .then(() => {
+                        loadLocations();
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Sucesso!',
+                            text: 'Localização adicionada com sucesso'
+                        });
+                    })
+                    .catch(error => {
+                        console.error('Erro:', error);
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Erro!',
+                            text: error.message
+                        });
+                    });
+                }
+            });
+        }
+
+        // Editar localização
+        function editLocation(id, currentName) {
+            Swal.fire({
+                title: 'Editar Localização',
+                input: 'text',
+                inputLabel: 'Nome da localização',
+                inputValue: currentName,
+                showCancelButton: true,
+                confirmButtonText: 'Salvar',
+                cancelButtonText: 'Cancelar',
+                inputValidator: (value) => {
+                    if (!value) {
+                        return 'Digite um nome para a localização';
+                    }
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    fetch(`/api/localizacoes/${id}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ nome: result.value })
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            return response.text().then(text => { throw new Error(text) });
+                        }
+                        return response.json();
+                    })
+                    .then(() => {
+                        loadLocations();
+                        Swal.fire('Sucesso!', 'Localização atualizada com sucesso', 'success');
+                    })
+                    .catch(error => {
+                        Swal.fire('Erro!', error.message, 'error');
+                    });
+                }
+            });
+        }
+
+        // Excluir localização
+        function deleteLocation(id) {
+            Swal.fire({
+                title: 'Confirmar exclusão',
+                text: 'Tem certeza que deseja excluir esta localização?',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sim, excluir',
+                cancelButtonText: 'Cancelar'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    fetch(`/api/localizacoes/${id}`, {
+                        method: 'DELETE'
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            return response.text().then(text => { throw new Error(text) });
+                        }
+                        return response.json();
+                    })
+                    .then(() => {
+                        loadLocations();
+                        Swal.fire('Sucesso!', 'Localização excluída com sucesso', 'success');
+                    })
+                    .catch(error => {
+                        Swal.fire('Erro!', error.message, 'error');
+                    });
+                }
+            });
+        }
+
+        // Formulário de cadastro de bens
+        function submitForm(event) {
+            event.preventDefault();
+            
+            const formData = new FormData(document.getElementById('formCadastro'));
+            
+            fetch('/adicionar', {
+                method: 'POST',
+                body: formData,
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.text().then(text => {
+                        throw new Error(text);
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    Swal.fire({
+                        title: 'Bem cadastrado com sucesso!',
+                        text: 'Deseja gerar um QR Code para este item?',
+                        icon: 'success',
+                        showCancelButton: true,
+                        confirmButtonText: 'Sim, gerar QR Code',
+                        cancelButtonText: 'Não'
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            // Gerar QR Code
+                            fetch(`/gerar-qrcode/${data.id}`, {
+                                method: 'POST'
+                            })
+                            .then(response => response.json())
+                            .then(qrData => {
+                                Swal.fire({
+                                    title: 'QR Code Gerado!',
+                                    text: 'O QR Code foi gerado com sucesso.',
+                                    icon: 'success'
+                                }).then(() => {
+                                    window.location.href = '/';
+                                });
+                            })
+                            .catch(error => {
+                                Swal.fire({
+                                    icon: 'error',
+                                    title: 'Erro!',
+                                    text: 'Erro ao gerar QR Code: ' + error.message
+                                });
+                            });
+                        } else {
+                            window.location.href = '/';
+                        }
+                    });
+                }
+            })
+            .catch(error => {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Erro!',
+                    text: error.message,
+                });
+            });
+        }
+
+        // Carregar localizações ao iniciar a página
+        document.addEventListener('DOMContentLoaded', loadLocations);
+    </script>
+</body>
+</html>

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editar Bem - Sistema de Inventário</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container mt-4">
+        <h1 class="mb-4">Editar Bem</h1>
+
+        <div class="card">
+            <div class="card-body">
+                <form action="/atualizar/<%= bem.id %>" method="POST">
+                    <div class="mb-3">
+                        <label for="descricao" class="form-label">Descrição</label>
+                        <input type="text" class="form-control" id="descricao" name="descricao" value="<%= bem.descricao %>" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="localizacao_id" class="form-label">Localização</label>
+                        <select class="form-select" id="localizacao_id" name="localizacao_id" required>
+                            <!-- Preenchido via JavaScript -->
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Atualizar</button>
+                    <a href="/" class="btn btn-secondary">Cancelar</a>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Carregar localizações
+        function loadLocations() {
+            fetch('/api/localizacoes')
+                .then(response => response.json())
+                .then(locations => {
+                    const select = document.querySelector('#localizacao_id');
+                    select.innerHTML = locations.map(loc => 
+                        `<option value="${loc.id}" ${loc.id === <%= bem.localizacao_id %> ? 'selected' : ''}>
+                            ${loc.nome}
+                        </option>`
+                    ).join('');
+                });
+        }
+
+        // Carregar localizações ao iniciar a página
+        document.addEventListener('DOMContentLoaded', loadLocations);
+    </script>
+</body>
+</html>

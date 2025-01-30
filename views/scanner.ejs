@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scanner QR Code</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Adicionar biblioteca HTML5-QRCode -->
+    <script src="https://unpkg.com/html5-qrcode"></script>
+</head>
+<body>
+    <div class="container mt-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Scanner QR Code</h5>
+            </div>
+            <div class="card-body">
+                <div id="reader"></div>
+                <div id="result"></div>
+            </div>
+            <div class="card-footer">
+                <a href="/" class="btn btn-primary">Voltar</a>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <script>
+        function onScanSuccess(decodedText, decodedResult) {
+            // Extrair o ID do bem da URL do QR code
+            const url = new URL(decodedText);
+            const pathParts = url.pathname.split('/');
+            const bemId = pathParts[pathParts.length - 1];
+
+            // Verificar se o bem existe
+            fetch(`/verificar-bem/${bemId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.exists) {
+                        window.location.href = `/bem/${bemId}`;
+                    } else {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Bem não encontrado',
+                            text: 'O item escaneado não foi encontrado no sistema.',
+                            confirmButtonText: 'OK'
+                        });
+                    }
+                })
+                .catch(error => {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Erro',
+                        text: 'Erro ao verificar o item: ' + error.message,
+                        confirmButtonText: 'OK'
+                    });
+                });
+        }
+
+        function onScanFailure(error) {
+            // Erro de leitura - não precisa fazer nada
+        }
+
+        // Configurar o scanner
+        let html5QrcodeScanner = new Html5QrcodeScanner(
+            "reader",
+            { fps: 10, qrbox: {width: 250, height: 250} },
+            /* verbose= */ false);
+        html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+    </script>
+
+    <style>
+        #reader {
+            width: 100%;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        #reader video {
+            max-width: 100%;
+        }
+    </style>
+</body>
+</html>
