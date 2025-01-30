@@ -333,7 +333,47 @@ app.post('/gerar-qrcode/:id', async (req, res) => {
     }
 });
 
-// Visualizar bem específico
+// Verificar se um bem existe
+app.get('/verificar-bem/:id', (req, res) => {
+    const bemId = req.params.id;
+    console.log('Verificando bem com ID:', bemId);
+
+    // Validar o ID
+    const numericId = parseInt(bemId, 10);
+    if (isNaN(numericId) || numericId <= 0 || numericId > 999999) {
+        console.error('ID inválido:', bemId);
+        res.status(400).json({ 
+            error: 'ID inválido', 
+            exists: false,
+            message: 'O ID deve ser um número entre 1 e 999999'
+        });
+        return;
+    }
+
+    pool.query(
+        'SELECT id FROM bens WHERE id = $1',
+        [numericId],
+        (err, results) => {
+            if (err) {
+                console.error('Erro ao verificar bem no banco:', err);
+                res.status(500).json({ 
+                    error: 'Erro ao verificar bem', 
+                    details: err.message,
+                    exists: false 
+                });
+                return;
+            }
+
+            console.log('Resultado da consulta:', results.rows);
+            res.json({ 
+                exists: results.rows.length > 0,
+                message: results.rows.length > 0 ? 'Bem encontrado' : 'Bem não encontrado'
+            });
+        }
+    );
+});
+
+// Rota para visualizar um bem específico
 app.get('/bem/:id', (req, res) => {
     pool.query(
         `SELECT b.*, l.nome as localizacao_nome 
@@ -343,13 +383,16 @@ app.get('/bem/:id', (req, res) => {
         [req.params.id],
         (err, results) => {
             if (err) {
+                console.error('Erro ao buscar bem:', err);
                 res.status(500).send('Erro ao buscar bem');
                 return;
             }
+            
             if (results.rows.length === 0) {
                 res.status(404).send('Bem não encontrado');
                 return;
             }
+            
             res.render('bem', { bem: results.rows[0] });
         }
     );
@@ -358,21 +401,6 @@ app.get('/bem/:id', (req, res) => {
 // Página do scanner
 app.get('/scanner', (req, res) => {
     res.render('scanner');
-});
-
-// Verificar se um bem existe
-app.get('/verificar-bem/:id', (req, res) => {
-    pool.query(
-        'SELECT id FROM bens WHERE id = $1',
-        [req.params.id],
-        (err, results) => {
-            if (err) {
-                res.status(500).json({ error: 'Erro ao verificar bem' });
-                return;
-            }
-            res.json({ exists: results.rows.length > 0 });
-        }
-    );
 });
 
 const PORT = 3000;

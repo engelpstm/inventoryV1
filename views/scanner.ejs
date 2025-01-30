@@ -29,14 +29,46 @@
 
     <script>
         function onScanSuccess(decodedText, decodedResult) {
-            // Extrair o ID do bem da URL do QR code
-            const url = new URL(decodedText);
-            const pathParts = url.pathname.split('/');
-            const bemId = pathParts[pathParts.length - 1];
+            console.log('QR Code lido:', decodedText);
+            
+            // Tentar extrair o ID do bem do QR code
+            let bemId;
+            
+            try {
+                // Tentar primeiro como URL completa
+                const url = new URL(decodedText);
+                const pathParts = url.pathname.split('/');
+                bemId = pathParts[pathParts.length - 1];
+            } catch (e) {
+                // Se não for uma URL válida, tentar como ID direto
+                bemId = decodedText;
+            }
+
+            // Extrair apenas os primeiros 6 dígitos como ID do bem
+            // Assumindo que o formato é: IDIDID20250130030000000
+            // onde IDIDID são os 6 primeiros dígitos que representam o ID real
+            bemId = bemId.replace(/\D/g, '').substring(0, 6);
+
+            if (!bemId) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'QR Code inválido',
+                    text: 'O QR Code não contém um ID de bem válido.',
+                    confirmButtonText: 'OK'
+                });
+                return;
+            }
+
+            console.log('ID do bem extraído:', bemId);
 
             // Verificar se o bem existe
             fetch(`/verificar-bem/${bemId}`)
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
                 .then(data => {
                     if (data.exists) {
                         window.location.href = `/bem/${bemId}`;
@@ -50,6 +82,7 @@
                     }
                 })
                 .catch(error => {
+                    console.error('Erro:', error);
                     Swal.fire({
                         icon: 'error',
                         title: 'Erro',
@@ -61,13 +94,23 @@
 
         function onScanFailure(error) {
             // Erro de leitura - não precisa fazer nada
+            console.log('Erro de leitura:', error);
         }
 
-        // Configurar o scanner
+        // Configurar o scanner com melhor qualidade
         let html5QrcodeScanner = new Html5QrcodeScanner(
             "reader",
-            { fps: 10, qrbox: {width: 250, height: 250} },
-            /* verbose= */ false);
+            { 
+                fps: 10, 
+                qrbox: {width: 250, height: 250},
+                experimentalFeatures: {
+                    useBarCodeDetectorIfSupported: true
+                },
+                rememberLastUsedCamera: true,
+                showTorchButtonIfSupported: true
+            },
+            /* verbose= */ false
+        );
         html5QrcodeScanner.render(onScanSuccess, onScanFailure);
     </script>
 
@@ -79,6 +122,19 @@
         }
         #reader video {
             max-width: 100%;
+        }
+        /* Melhorar a visibilidade do leitor */
+        #reader__scan_region {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        #reader__camera_selection {
+            margin: 10px 0;
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
         }
     </style>
 </body>
