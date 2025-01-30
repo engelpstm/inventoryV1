@@ -185,16 +185,16 @@ app.post('/api/localizacoes', (req, res) => {
     const nomeNormalizado = nome.trim();
 
     pool.query(
-        'INSERT INTO localizacoes (nome) VALUES ($1)',
+        'INSERT INTO localizacoes (nome) VALUES ($1) RETURNING id, nome',
         [nomeNormalizado],
         (err, result) => {
             if (err) {
-                console.error('Erro ao inserir localização:', err);
                 if (err.code === '23505') {
                     res.status(400).send('Esta localização já existe');
                     return;
                 }
-                res.status(500).send('Erro ao cadastrar localização. Por favor, tente novamente.');
+                console.error('Erro ao inserir localização:', err);
+                res.status(500).send('Erro ao criar localização');
                 return;
             }
             res.json({ id: result.rows[0].id, nome: nomeNormalizado });
