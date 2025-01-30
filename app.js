@@ -44,10 +44,10 @@ app.use(express.static('public'));
 
 // Conexão com o banco de dados
 const pool = new Pool({
-    user: 'postgres',
-    host: 'localhost',
-    database: 'inventario',
-    password: '123456',
+    user: 'inventario_s4kr_user',
+    host: 'dpg-cudcbj3tq21c738d7160-a',
+    database: 'inventario_s4kr',
+    password: 'OCXtQN6TIXzXnpvjIfcmb8kwFY1A5I7E',
     port: 5432
 });
 
